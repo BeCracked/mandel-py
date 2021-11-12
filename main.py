@@ -1,42 +1,58 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import numpy
 import matplotlib.pyplot as plt
 from numba import jit
 
 MAX_ITERATIONS = 100
 K4 = {'x': 3840, 'y': 2160}
+K2w = {'x': 2560, 'y': 1920}
 K1 = {'x': 1920, 'y': 1080}
 
-# ZOOM_POINT = {-0.670207263127854;0.45806578196347025;0.00048828125;}
-# ZOOM_POINT = {'re': -0.5616438356164384, 'im': 0.6432648401826484, 'zm': 2}  #;100
-ZOOM_POINT = {'re': 0, 'im': 0, 'zm': 1}
+# Base linear space values
+b_re_lower = -2
+b_re_upper = 1
+b_im_lower = -1.5
+b_im_upper = 1.5
+
+# View port base coordinates
+mm = numpy.array([b_re_lower, b_im_lower])  # lower left corner
+mp = numpy.array([b_re_lower, b_im_upper])  # upper left corner
+pp = numpy.array([b_re_upper, b_im_upper])  # upper right corner
+pm = numpy.array([b_re_upper, b_im_lower])  # lower right corner
 
 
-def render_image(columns, rows, image_name):
-    zoom_factor = ZOOM_POINT['zm']
-    zoom_dir = {'re': ZOOM_POINT['re'], 'im': ZOOM_POINT['im']}
-    result = numpy.zeros([rows, columns])
-    # Calc linspace bounds from zoom
-    re_lower = -2  # -2 + zoom_dir['re']*zoom_factor
-    re_upper = 1  # 1 + zoom_dir['re']*zoom_factor
-    im_lower = -1  # -1 + zoom_dir['im']*zoom_factor
-    im_upper = 1  # 1 + zoom_dir['im']*zoom_factor
-    re_space = numpy.linspace(re_lower, re_upper, num=rows)
-    im_space = numpy.linspace(im_lower, im_upper, num=columns)
+# Currently not aspect ratio aware. Only works well with ultra wide like K2w
+def render_image(width=2560, height=1920, zoom_point=numpy.array([-1, 0.3]), zoom_factor=0., color_map='CMRmap_r'):
+    # Define view port and zoom
+    z = zoom_point  # zoom point
+    # Scale viewport
+    mm_z = mm + (z - mm) * zoom_factor
+    mp_z = mp + (z - mp) * zoom_factor
+    pp_z = pp + (z - pp) * zoom_factor
+    pm_z = pm + (z - pm) * zoom_factor
+
+    re_space = numpy.linspace(mm_z[0], pp_z[0], num=height)  # lower left and lower right real components
+    im_space = numpy.linspace(mm_z[1], mp_z[1], num=width)  # lower left and upper left img components
+
+    # Init result array
+    result = numpy.zeros([height, width])
+    # Enumerate over all points
     for row_index, re in enumerate(re_space):
         for column_index, im in enumerate(im_space):
             result[row_index, column_index] = mandelbrot_iteration(re, im, MAX_ITERATIONS)
 
-    fig = plt.figure(figsize=(columns / 100, rows / 100), frameon=False)
+    # Set up figure for rendering
+    # width and height divided by constant to make them the size of a pixel
+    fig = plt.figure(figsize=(width / 100, height / 100), frameon=False)
+    # Add and disable axes
     ax = fig.add_axes([0, 0, 1, 1])
     ax.axis('off')
 
-    plt.imshow(result.T, cmap='gist_stern', interpolation='bilinear', extent=[-2, 1, -1, 1])
-    fig.savefig(f'{image_name}.png', transparent=True)
+    plt.imshow(numpy.flipud(result.T), cmap=color_map, interpolation='gaussian',
+               aspect='auto', extent=[-2, 1, -1.5, 1.5])
+    fig.savefig(f'mandelbrot.png', transparent=True)
     plt.show()
+
+    return plt
 
 
 @jit("u4(f4, f4, u4)")
@@ -53,4 +69,4 @@ def mandelbrot_iteration(re, im, max_iter):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    render_image(K1['x'], K1['y'], "mandelbrot")
+    img = render_image(K2w['x'], K2w['y'], numpy.array([-1, 0.3]), 0.99)
